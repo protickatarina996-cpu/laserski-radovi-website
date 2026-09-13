@@ -88,31 +88,26 @@
     }
   }
 
-  /* ---- Laser-cut hero title animation ---- */
-  var heroTitle = document.getElementById("heroTitle");
-  if (heroTitle) {
+  /* ---- Hero video: respect reduced motion, keep paused off-screen ---- */
+  var heroVideo = document.getElementById("heroVideo");
+  if (heroVideo) {
     if (prefersReducedMotion) {
-      heroTitle.classList.add("is-static");
+      heroVideo.removeAttribute("autoplay");
+      heroVideo.pause();
     } else if ("IntersectionObserver" in window) {
-      var heroObserver = new IntersectionObserver(
-        function (entries, obs) {
+      var videoObserver = new IntersectionObserver(
+        function (entries) {
           entries.forEach(function (entry) {
             if (entry.isIntersecting) {
-              heroTitle.classList.add("play");
-              obs.disconnect();
-              // Lock in the final revealed state once the animation finishes,
-              // so lingering clip-path/positioning never looks unfinished.
-              window.setTimeout(function () {
-                heroTitle.classList.add("is-static");
-              }, 1700);
+              heroVideo.play().catch(function () {});
+            } else {
+              heroVideo.pause();
             }
           });
         },
-        { threshold: 0.3 }
+        { threshold: 0.2 }
       );
-      heroObserver.observe(heroTitle);
-    } else {
-      heroTitle.classList.add("is-static");
+      videoObserver.observe(heroVideo);
     }
   }
 })();

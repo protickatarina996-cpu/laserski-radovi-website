@@ -290,6 +290,16 @@ body {
 
 .hero-inner { position: relative; }
 
+.hero-inner-media {
+  display: grid;
+  gap: 2.75rem;
+  align-items: center;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 860px) {
+  .hero-inner-media { grid-template-columns: 1.15fr 0.85fr; gap: 2.5rem; }
+}
+
 .eyebrow {
   font-size: 0.78rem;
   font-weight: 600;
@@ -299,100 +309,18 @@ body {
 }
 
 .hero-title {
-  margin: 0 0 1.75rem;
+  margin: 0 0 1.5rem;
   font-weight: 900;
   text-transform: uppercase;
   line-height: 0.98;
   letter-spacing: -0.01em;
-  font-size: clamp(2.6rem, 12vw, 6.6rem);
-}
-
-.laser-line {
-  position: relative;
-  display: block;
-  isolation: isolate;
-  width: max-content;
-  max-width: 100%;
-}
-
-.laser-line .ghost,
-.laser-line .metal {
-  grid-area: 1 / 1;
-}
-
-.laser-line {
-  display: grid;
-}
-
-.ghost {
-  color: transparent;
-  -webkit-text-stroke: 1.5px rgba(255, 255, 255, 0.16);
-}
-
-.metal {
+  font-size: clamp(2.6rem, 8vw, 5.4rem);
   background: linear-gradient(180deg, var(--metal-1) 0%, var(--metal-2) 38%, var(--metal-3) 62%, var(--metal-4) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  filter: drop-shadow(0 0 18px rgba(255, 154, 61, 0.22));
-  clip-path: inset(0 100% 0 0);
+  filter: drop-shadow(0 0 18px rgba(255, 154, 61, 0.18));
 }
-
-.laser-head {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: -8px;
-  width: 8px;
-  pointer-events: none;
-  opacity: 0;
-}
-.laser-head .beam {
-  position: absolute;
-  left: 50%;
-  top: -14px;
-  bottom: -14px;
-  width: 2px;
-  transform: translateX(-50%);
-  background: linear-gradient(180deg, transparent, var(--accent-2) 35%, var(--metal-1) 92%, transparent);
-  box-shadow: 0 0 10px 1px rgba(255, 183, 3, 0.6);
-}
-.laser-head .spark {
-  position: absolute;
-  left: 50%;
-  bottom: -6px;
-  width: 22px;
-  height: 22px;
-  transform: translate(-50%, 50%);
-  border-radius: 50%;
-  background: radial-gradient(circle, #fff8ec 0%, var(--accent-2) 40%, var(--accent) 65%, transparent 75%);
-  filter: blur(0.5px);
-  animation: sparkFlicker 0.18s infinite alternate ease-in-out;
-}
-
-@keyframes sparkFlicker {
-  from { transform: translate(-50%, 50%) scale(0.85); opacity: 0.85; }
-  to   { transform: translate(-50%, 50%) scale(1.15); opacity: 1; }
-}
-
-@keyframes revealClip {
-  from { clip-path: inset(0 100% 0 0); }
-  to   { clip-path: inset(0 0 0 0); }
-}
-@keyframes headTravel {
-  0%   { left: -8px; opacity: 0; }
-  4%   { opacity: 1; }
-  92%  { opacity: 1; }
-  100% { left: calc(100% - 8px); opacity: 0; }
-}
-
-.hero-title.play .laser-line[data-line="1"] .metal { animation: revealClip 1.05s var(--ease) forwards; }
-.hero-title.play .laser-line[data-line="1"] .laser-head { animation: headTravel 1.05s var(--ease) forwards; }
-.hero-title.play .laser-line[data-line="2"] .metal { animation: revealClip 1.05s var(--ease) forwards; animation-delay: 0.5s; }
-.hero-title.play .laser-line[data-line="2"] .laser-head { animation: headTravel 1.05s var(--ease) forwards; animation-delay: 0.5s; }
-
-.hero-title.is-static .metal { clip-path: inset(0 0 0 0); }
-.hero-title.is-static .laser-head { display: none; }
 
 .hero-sub {
   max-width: 42ch;
@@ -405,6 +333,66 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 1rem;
+}
+
+/* ---- Hero video panel (real workshop footage) ---- */
+.hero-video-panel {
+  position: relative;
+  width: 100%;
+  max-width: 340px;
+  margin-inline: auto;
+  aspect-ratio: 9 / 16;
+  border-radius: 22px;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 30px 70px -24px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.03);
+  background: var(--bg-elev);
+}
+@media (min-width: 860px) {
+  .hero-video-panel { max-width: 100%; }
+}
+
+.hero-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.hero-video-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(6, 6, 7, 0.88) 0%, rgba(6, 6, 7, 0.05) 42%, rgba(6, 6, 7, 0.15) 100%);
+}
+
+.hero-video-caption {
+  position: absolute;
+  left: 1rem;
+  right: 1rem;
+  bottom: 1rem;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--fg);
+}
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 rgba(255, 122, 41, 0.55);
+  animation: liveDotPulse 1.8s infinite;
+  flex-shrink: 0;
+}
+@keyframes liveDotPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(255, 122, 41, 0.55); }
+  70%  { box-shadow: 0 0 0 8px rgba(255, 122, 41, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 122, 41, 0); }
 }
 
 .scroll-cue {
