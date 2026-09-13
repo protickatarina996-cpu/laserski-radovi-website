@@ -1,0 +1,127 @@
+/* ===== Variant B hero — faceted rotating crystal, Sharplink-inspired ===== */
+
+.hero-inner-b {
+  display: grid;
+  gap: 3rem;
+  align-items: center;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 900px) {
+  .hero-inner-b { grid-template-columns: 1.05fr 0.95fr; gap: 2rem; }
+}
+
+.hero-title-static {
+  margin: 0 0 1.5rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  line-height: 0.98;
+  letter-spacing: -0.01em;
+  font-size: clamp(2.4rem, 8vw, 4.6rem);
+  background: linear-gradient(180deg, var(--metal-1) 0%, var(--metal-2) 38%, var(--metal-3) 62%, var(--metal-4) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 18px rgba(255, 154, 61, 0.18));
+}
+
+/* ---- 3D scene ---- */
+.hero-visual {
+  position: relative;
+  height: 340px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  perspective: 1400px;
+}
+@media (min-width: 640px) { .hero-visual { height: 420px; } }
+
+.facet-scene {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  transform-style: preserve-3d;
+  animation: facetSpinY 16s linear infinite;
+}
+.facet-scene-tilt {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  animation: facetSpinX 11s ease-in-out infinite;
+}
+
+@keyframes facetSpinY { to { transform: rotateY(360deg); } }
+@keyframes facetSpinX {
+  0%, 100% { transform: rotateX(-14deg); }
+  50%      { transform: rotateX(14deg); }
+}
+
+.facet {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 150px;
+  height: 128px;
+  margin: -64px 0 0 -75px;
+  clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+  transform-origin: center;
+  opacity: 0.94;
+}
+
+.facet--top1 { transform: rotateY(0deg)   rotateX(38deg) translateZ(78px); background: linear-gradient(160deg, var(--metal-1), var(--metal-2)); }
+.facet--top2 { transform: rotateY(90deg)  rotateX(38deg) translateZ(78px); background: linear-gradient(160deg, var(--metal-2), var(--accent-2)); }
+.facet--top3 { transform: rotateY(180deg) rotateX(38deg) translateZ(78px); background: linear-gradient(160deg, var(--metal-1), var(--metal-3)); }
+.facet--top4 { transform: rotateY(270deg) rotateX(38deg) translateZ(78px); background: linear-gradient(160deg, var(--metal-2), var(--accent-2)); }
+
+.facet--bot1 { transform: rotateY(0deg)   rotateX(142deg) translateZ(78px); background: linear-gradient(200deg, var(--metal-4), var(--metal-3)); }
+.facet--bot2 { transform: rotateY(90deg)  rotateX(142deg) translateZ(78px); background: linear-gradient(200deg, var(--accent), var(--metal-4)); }
+.facet--bot3 { transform: rotateY(180deg) rotateX(142deg) translateZ(78px); background: linear-gradient(200deg, var(--metal-4), var(--metal-3)); }
+.facet--bot4 { transform: rotateY(270deg) rotateX(142deg) translateZ(78px); background: linear-gradient(200deg, var(--accent), var(--metal-4)); }
+
+.facet::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+  background: linear-gradient(180deg, rgba(255,255,255,0.22), transparent 60%);
+  mix-blend-mode: overlay;
+}
+
+.facet-glow {
+  position: absolute;
+  inset: -30%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 154, 61, 0.22), transparent 65%);
+  filter: blur(6px);
+  z-index: -1;
+}
+
+/* ---- blueprint dotted accents ---- */
+.blueprint {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+.blueprint line {
+  stroke: rgba(255, 183, 3, 0.45);
+  stroke-width: 1;
+  stroke-dasharray: 2 5;
+  stroke-linecap: round;
+}
+.blueprint rect {
+  fill: none;
+  stroke: rgba(255, 183, 3, 0.6);
+  stroke-width: 1.2;
+}
+.blueprint circle {
+  fill: var(--accent-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .facet-scene,
+  .facet-scene-tilt {
+    animation: none;
+    transform: rotateY(-24deg);
+  }
+  .facet-scene-tilt { transform: rotateX(-10deg); }
+}
