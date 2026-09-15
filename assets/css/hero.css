@@ -1,0 +1,117 @@
+/* ---------------------------------------------------------------------------
+   Laserski -- hero
+   ---------------------------------------------------------------------------
+   The hero photograph is shown at its native aspect ratio and is never cropped,
+   scaled down or otherwise altered. The animation overlays sit in the same box
+   and carry the image's own viewBox, so they stay registered to the lettering
+   at every viewport width without a single hard-coded pixel offset.
+--------------------------------------------------------------------------- */
+
+:root {
+  --ink: #0b0b0d;
+  --paper: #f4f2ef;
+  --muted: #9a9a9f;
+  --hero-ratio: 1983 / 793;
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-weight: 300;
+}
+
+/* --- hero ---------------------------------------------------------------- */
+
+.hero {
+  position: relative;
+  width: 100%;
+  background: #08080a;
+  overflow: hidden;
+}
+
+/* The stage is the shared coordinate box: the photograph and both SVG overlays
+   fill it exactly, so they scale and move as one element. */
+.hero__stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: var(--hero-ratio);
+}
+
+.hero__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* No object-fit crop: the photograph is shown whole, exactly as authored. */
+  border: 0;
+}
+
+.laser-fx {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+/* The cooled kerf is a dark line, so it blends normally. */
+.laser-fx--kerf {
+  z-index: 2;
+  transition: opacity 120ms linear;
+}
+
+/* Everything hot only ever adds light, which is what keeps the glow reading as
+   part of the photograph instead of a layer sitting on top of it. */
+.laser-fx--glow {
+  z-index: 3;
+  mix-blend-mode: screen;
+}
+
+.laser-fx__kerf {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.62);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.laser-fx__head {
+  /* The head moves every frame; the particle layers do not need promoting. */
+  will-change: transform, opacity;
+}
+
+/* --- page furniture below the hero, so the scroll behaviour is exercised --- */
+
+.section {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 96px 24px;
+}
+
+.section h2 {
+  margin: 0 0 20px;
+  font-size: clamp(22px, 3.4vw, 34px);
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.section p {
+  max-width: 60ch;
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: clamp(15px, 1.5vw, 17px);
+  line-height: 1.75;
+}
+
+.section--tall { min-height: 90vh; }
+
+@media (prefers-reduced-motion: reduce) {
+  /* Belt and braces: the script removes the overlays, and so does the stylesheet. */
+  .laser-fx { display: none !important; }
+}
