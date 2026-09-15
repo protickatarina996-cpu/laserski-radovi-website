@@ -10,15 +10,24 @@
  * clean plate carries no baked-in beam light, every bit of heat on the material
  * can travel with the beam.
  *
- * Four overlays share the plate's own coordinate system (viewBox 0 0 1983 793),
+ * The letters are CREATED by the beam, not traced over. A second derived plate
+ * -- the same photograph with the lettering painted out, so it reads as blank
+ * stock -- is laid over the hero and erased along the cut path. Ahead of the
+ * beam there is only uncut material; behind it the kerf opens; and when a
+ * contour closes, that piece is freed and the letter appears. Nothing is ever
+ * written back to the photograph: by the end the stock is fully erased, so the
+ * hero settles into the untouched original.
+ *
+ * Five overlays share the plate's own coordinate system (viewBox 0 0 1983 793),
  * so everything stays registered to the letters at any viewport size:
  *
- *   1  kerf  (normal)  the dark cooled cut left behind
- *   2  heat  (screen)  the cooling gradient, masked to what has been cut
- *   3  rig   (normal)  the laser assembly -- an object, so it occludes the plate
- *   4  beam  (screen)  beam, contact flare, light pool, sparks, smoke
+ *   1  stock (normal)  uncut material, masked away as the beam passes
+ *   2  kerf  (normal)  the dark cooled cut left behind
+ *   3  heat  (screen)  the cooling gradient, masked to what has been cut
+ *   4  rig   (normal)  the laser assembly -- an object, so it occludes the plate
+ *   5  beam  (screen)  beam, contact flare, light pool, sparks, smoke
  *
- * Screen blending on 2 and 4 is what keeps the light sitting *inside* the
+ * Screen blending on 3 and 5 is what keeps the light sitting *inside* the
  * photograph: it can only add light, never flatten the image. The rig sits
  * between them because the machine is in front of the material but behind the
  * sparks that fly off it.
@@ -41,6 +50,8 @@
     sampleStep: 2.2,        // arc-length resolution of the pre-baked path
     heatRadius: 205,        // reach of the cooling gradient behind the head
     coolOutMs: 1500,        // fade of the finished cut, once the run completes
+    releaseMs: 150,         // how long a freed piece takes to settle into view
+    kerfReveal: 5.2,        // width of material the beam opens, in image units
 
     standoff: 19,           // gap from nozzle to material, in image units
     travelLift: 15,         // how far the head rises on a travel move
@@ -379,12 +390,38 @@
     var mobile = this.mobileQuery.matches;
     var self = this;
 
-    // ---- 1. kerf: a cut is a dark line, so it blends normally ---------------
+    // ---- 1. stock: the material the beam has not reached yet ---------------
+    // Everything inside the mask starts white (stock shown). The beam paints
+    // black into it, which erases the stock and lets the photograph through.
+    this.stock = this.program.stock;
+    if (this.stock) {
+      this.stockSvg = this.layer('laser-fx--stock');
+      var sDefs = el('defs');
+      this.stockSvg.appendChild(sDefs);
+      var uncut = el('mask', { id: u + '-uncut', maskUnits: 'userSpaceOnUse',
+        x: this.stock.box[0], y: this.stock.box[1],
+        width: this.stock.box[2], height: this.stock.box[3] });
+      uncut.appendChild(el('rect', {
+        x: this.stock.box[0], y: this.stock.box[1],
+        width: this.stock.box[2], height: this.stock.box[3], fill: '#fff' }));
+      this.uncutGroup = el('g', {
+        fill: 'none', stroke: '#000', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
+      uncut.appendChild(this.uncutGroup);
+      sDefs.appendChild(uncut);
+      var stockImg = el('image', {
+        x: this.stock.box[0], y: this.stock.box[1],
+        width: this.stock.box[2], height: this.stock.box[3],
+        href: this.stock.src, preserveAspectRatio: 'none', mask: 'url(#' + u + '-uncut)' });
+      stockImg.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', this.stock.src);
+      this.stockSvg.appendChild(stockImg);
+    }
+
+    // ---- 2. kerf: a cut is a dark line, so it blends normally ---------------
     this.kerfSvg = this.layer('laser-fx--kerf');
     var kerfGroup = el('g', { 'class': 'laser-fx__kerf' });
     this.kerfSvg.appendChild(kerfGroup);
 
-    // ---- 2. heat: masked to what has been cut, coloured by distance from the
+    // ---- 3. heat: masked to what has been cut, coloured by distance from the
     //        beam, so the kerf reads white-hot -> amber -> cooled ------------
     this.heatSvg = this.layer('laser-fx--heat');
     var defs = el('defs');
@@ -420,7 +457,7 @@
     });
     this.heatSvg.appendChild(this.heatLayer);
 
-    // ---- 3. rig: the assembly itself, cut from the matching photograph ------
+    // ---- 4. rig: the assembly itself, cut from the matching photograph ------
     this.rigSvg = this.layer('laser-fx--rig');
     this.rig = el('g', { 'class': 'laser-fx__rig' });
     this.rigSvg.appendChild(this.rig);
@@ -440,7 +477,7 @@
     this.headImage.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', head.src);
     this.rig.appendChild(this.headImage);
 
-    // ---- 4. beam and everything hot, in front of the rig --------------------
+    // ---- 5. beam and everything hot, in front of the rig --------------------
     this.beamSvg = this.layer('laser-fx--beam');
     var bDefs = el('defs');
     this.beamSvg.appendChild(bDefs);
@@ -508,9 +545,13 @@
 
     // ---- the programme: home -> every letter -> home ------------------------
     this.steps = [];
+    this.pendingReleases = [];
     var cursor = head.home.slice();
     var homeScale = this.program.homeScale || 1;
     var prevScale = homeScale;
+
+    this.reveals = [];
+    var uncutGroup = this.uncutGroup;
 
     this.program.segments.forEach(function (seg, i) {
       var kerfPath = el('path', { d: seg.d, 'class': 'laser-fx__kerf-line' });
@@ -518,8 +559,24 @@
       var maskPath = el('path', { d: seg.d });
       maskGroup.appendChild(maskPath);
 
+      // The beam opens this much material as it goes. Erasing the stock here is
+      // what makes the kerf appear behind the head instead of the whole letter
+      // sitting there from the start.
+      var cutPath = null, freePath = null;
+      if (uncutGroup) {
+        cutPath = el('path', { d: seg.d, stroke: '#000',
+          'stroke-width': (CONFIG.kerfReveal * seg.scale).toFixed(2) });
+        uncutGroup.appendChild(cutPath);
+        if (seg.kind === 'outer') {
+          // Closing an outer contour frees the piece: the letter arrives whole.
+          freePath = el('path', { d: seg.d, fill: '#000', stroke: 'none', opacity: '0' });
+          uncutGroup.appendChild(freePath);
+        }
+      }
+
       var baked = bakePath(maskPath, true);
-      [kerfPath, maskPath].forEach(function (p) {
+      [kerfPath, maskPath, cutPath].forEach(function (p) {
+        if (!p) return;
         p.setAttribute('stroke-dasharray', baked.total + ' ' + (baked.total + 1));
         p.setAttribute('stroke-dashoffset', baked.total);
       });
@@ -534,10 +591,12 @@
       });
       prevScale = seg.scale;
       self.steps.push({ type: 'pierce', duration: CONFIG.pierceDwell, at: start, scale: seg.scale });
-      self.steps.push({
+      var cutStep = {
         type: 'cut', baked: baked, duration: baked.duration * 1000,
-        scale: seg.scale, kerfPath: kerfPath, maskPath: maskPath
-      });
+        scale: seg.scale, kerfPath: kerfPath, maskPath: maskPath, cutPath: cutPath
+      };
+      self.steps.push(cutStep);
+      if (freePath) self.pendingReleases.push({ node: freePath, step: cutStep, last: -1 });
       cursor = start;                 // a closed loop finishes where it started
     });
 
@@ -549,7 +608,13 @@
       fromScale: prevScale, toScale: homeScale, parking: true
     });
 
-    this.totalDuration = this.steps.reduce(function (a, s) { return a + s.duration; }, 0);
+    var at = 0;
+    this.steps.forEach(function (st) { at += st.duration; st.endTime = at; });
+    this.totalDuration = at;
+    this.releases = this.pendingReleases.map(function (r) {
+      return { node: r.node, at: r.step.endTime, last: -1 };
+    });
+    delete this.pendingReleases;
 
     var sparkOpts = mobile ? CONFIG.sparksMobile : CONFIG.sparks;
     this.sparks = new SparkPool(sparkLayer, sparkOpts);
@@ -742,12 +807,16 @@
       cutting = true;
       intensity = 1;
 
-      // Reveal exactly as much of the kerf as the beam has travelled.
+      // Open exactly as much material as the beam has travelled: the kerf, the
+      // heat that follows it, and the stock it removes all share one offset.
       var drawn = (idx + uu) * bk.step;
       var off = Math.max(0, bk.total - drawn);
       step.kerfPath.setAttribute('stroke-dashoffset', off.toFixed(1));
       step.maskPath.setAttribute('stroke-dashoffset', off.toFixed(1));
+      if (step.cutPath) step.cutPath.setAttribute('stroke-dashoffset', off.toFixed(1));
     }
+
+    this.releaseFinished();
 
     var len = Math.hypot(dirX, dirY) || 1;
     dirX /= len; dirY /= len;
@@ -772,6 +841,22 @@
     }
     this.sparks.update(dt);
     this.smoke.update(dt);
+  };
+
+  /**
+   * A closed contour means the piece is free, so the letter it outlines stops
+   * being uncut stock and becomes part of the photograph. Ramped rather than
+   * snapped, so the piece settles into the light instead of blinking on.
+   */
+  LaserCuttingAnimation.prototype.releaseFinished = function () {
+    var r = this.releases;
+    if (!r) return;
+    for (var i = 0; i < r.length; i++) {
+      var t = clamp((this.elapsed - r[i].at) / CONFIG.releaseMs, 0, 1);
+      if (t === r[i].last) continue;
+      r[i].last = t;
+      r[i].node.setAttribute('opacity', t.toFixed(3));
+    }
   };
 
   /**
@@ -855,8 +940,13 @@
     var t = clamp(this.tailT / (CONFIG.coolOutMs / 1000), 0, 1);
     var fade = 1 - easeInOut(t);
     this.rest();
+    this.releaseFinished();
     this.heatLayer.setAttribute('opacity', fade.toFixed(3));
     this.kerfSvg.style.opacity = fade.toFixed(3);
+    // Every letter is cut by now, so the stock has nothing left to hide; retiring
+    // it also clears the feathered seam around the painted-out lettering, which
+    // is what makes the final frame identical to the photograph.
+    if (this.stockSvg) this.stockSvg.style.opacity = fade.toFixed(3);
     this.sparks.update(dt);
     this.smoke.update(dt);
     if (t >= 1) {
@@ -880,6 +970,7 @@
       this.kerfSvg.style.display = '';
       this.heatSvg.style.display = '';
       this.beamSvg.style.display = '';
+      if (this.stockSvg) this.stockSvg.style.display = '';
       this.root.setAttribute('data-laser-state', this.state);
       this.sync();
       return;
@@ -891,6 +982,7 @@
     this.kerfSvg.style.display = 'none';
     this.heatSvg.style.display = 'none';
     this.beamSvg.style.display = 'none';
+    if (this.stockSvg) this.stockSvg.style.display = 'none';
     this.root.setAttribute('data-laser-state', 'reduced');
   };
 
@@ -903,8 +995,7 @@
     } else if (this.reduceQuery.removeListener) {
       this.reduceQuery.removeListener(this.onMotionChange);
     }
-    var self = this;
-    [this.kerfSvg, this.heatSvg, this.rigSvg, this.beamSvg].forEach(function (s) {
+    [this.stockSvg, this.kerfSvg, this.heatSvg, this.rigSvg, this.beamSvg].forEach(function (s) {
       if (s && s.parentNode) s.parentNode.removeChild(s);
     });
   };

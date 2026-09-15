@@ -21,6 +21,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PLATE = os.path.join(ROOT, 'assets', 'img', 'hero-plate.png')
 OUT_JS = os.path.join(ROOT, 'assets', 'js', 'laser-cut-program.js')
 META = os.path.join(ROOT, 'tools', 'head-meta.json')
+BLANK_META = os.path.join(ROOT, 'tools', 'blank-meta.json')
 
 sys.setrecursionlimit(100000)
 
@@ -175,6 +176,7 @@ print('wrote tools/verify-contours.png')
 
 # ---- emit the JavaScript -----------------------------------------------------
 homeScale = round(depth_scale(meta['home'][1]), 3)
+blank = _j.load(open(BLANK_META)) if os.path.exists(BLANK_META) else None
 L = ['/**',
  ' * Cutting programme for the hero plate (assets/img/hero-plate.png).',
  ' *',
@@ -191,6 +193,9 @@ L = ['/**',
  ' * head.tip    the beam/material contact point inside the sprite -- the anchor',
  ' *             that gets placed on the current cut point',
  ' * head.home   where the assembly rests before and after the run',
+ ' * stock       the uncut-material plate laid over the photograph and erased',
+ ' *             along the cut path, so letters are created by the beam rather',
+ ' *             than merely traced; box is [x, y, w, h] in image space',
  ' * homeScale   apparent size at the home row; dividing a segment scale by this',
  ' *             gives how much bigger or smaller the head reads once it has',
  ' *             travelled to that letter',
@@ -206,8 +211,11 @@ L = ['/**',
  '    box: [%s],' % ', '.join(map(str, meta['box'])),
  '    tip: [%s],' % ', '.join(map(str, meta['tip'])),
  '    home: [%s]' % ', '.join(map(str, meta['home'])),
- '  },',
- '  segments: [']
+ '  },']
+if blank:
+    L += ['  stock: { src: "assets/img/hero-blank.png", box: [%s] },'
+          % ', '.join(map(str, blank['box']))]
+L += ['  segments: [']
 for s in segs:
     L += ['    {',
           '      letter: %s, kind: %s, scale: %s,' % (json.dumps(s['letter']), json.dumps(s['kind']), s['scale']),

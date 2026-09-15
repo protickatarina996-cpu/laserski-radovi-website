@@ -14,6 +14,9 @@
  * head.tip    the beam/material contact point inside the sprite -- the anchor
  *             that gets placed on the current cut point
  * head.home   where the assembly rests before and after the run
+ * stock       the uncut-material plate laid over the photograph and erased
+ *             along the cut path, so letters are created by the beam rather
+ *             than merely traced; box is [x, y, w, h] in image space
  * homeScale   apparent size at the home row; dividing a segment scale by this
  *             gives how much bigger or smaller the head reads once it has
  *             travelled to that letter
@@ -30,6 +33,7 @@ window.LASER_CUT_PROGRAM = {
     tip: [241, 499],
     home: [1497, 499]
   },
+  stock: { src: "assets/img/hero-blank.png", box: [638, 290, 1223, 457] },
   segments: [
     {
       letter: "L", kind: "outer", scale: 0.821,

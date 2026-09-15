@@ -78,9 +78,11 @@ a { color: inherit; }
   pointer-events: none;
 }
 
-/* A cut is a dark line, and the machine is a solid object: both blend normally. */
-.laser-fx--kerf { z-index: 2; }
-.laser-fx--rig  { z-index: 4; }
+/* Uncut material, a cut line and the machine are all opaque things: normal blend.
+   The stock sits directly on the plate and is erased as the beam passes. */
+.laser-fx--stock { z-index: 1; }
+.laser-fx--kerf  { z-index: 2; }
+.laser-fx--rig   { z-index: 4; }
 
 /* Heat and beam only ever add light, which keeps them inside the photograph. */
 .laser-fx--heat { z-index: 3; mix-blend-mode: screen; }
@@ -248,6 +250,7 @@ a { color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   /* The script keeps the assembly at rest and drops only the moving layers;
      the stylesheet does the same, so a laser bed never loses its laser. */
+  .laser-fx--stock,
   .laser-fx--kerf,
   .laser-fx--heat,
   .laser-fx--beam { display: none !important; }
