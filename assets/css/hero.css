@@ -3,7 +3,9 @@
    ---------------------------------------------------------------------------
    The hero is composited from two photographs: a clean plate with no machine in
    it, and the laser assembly cut out of the matching render as a sprite. The
-   animation moves the sprite, so the device follows the cut.
+   animation moves the sprite, so the device follows the cut, and a third derived
+   plate -- the same photograph with the lettering painted out -- is erased along
+   the cut path so the letters are created by the beam rather than traced.
 
    .hero__stage is the shared coordinate box. The plate and all four overlays
    fill it exactly and carry the plate's own viewBox, so they scale as one and
@@ -19,7 +21,7 @@
   --paper: #f2efeb;
   --muted: #a3a09c;
   --rule: rgba(242, 239, 235, 0.22);
-  --hero-ratio: 1983 / 793;
+  --hero-ratio: 1984 / 793;
   --hero-h: clamp(540px, 60vw, 760px);
 }
 
@@ -218,7 +220,30 @@ a { color: inherit; }
     min-height: var(--hero-h);
   }
 
-  .hero__copy { padding-bottom: clamp(48px, 7vw, 96px); }
+  /* The cut runs diagonally from upper left to lower right, leaving a clear
+     wedge beneath it. The copy lives in that wedge: the photograph's own cut
+     lettering is the headline, so the type here stays out of its way. */
+  .hero__copy {
+    align-self: flex-start;
+    max-width: 40ch;
+    padding-bottom: clamp(26px, 3.5vw, 46px);
+  }
+
+  .eyebrow { margin-bottom: 10px; }
+
+  .hero__title {
+    font-size: clamp(21px, 2.5vw, 32px);
+    line-height: 1.16;
+    margin-bottom: 12px;
+  }
+
+  .hero__lead {
+    font-size: clamp(13px, 1.1vw, 15px);
+    max-width: 44ch;
+    margin-bottom: 20px;
+  }
+
+  .cta { padding: 11px 24px; }
 }
 
 /* --- page furniture below the hero, so the scroll behaviour is exercised --- */

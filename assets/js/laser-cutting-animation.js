@@ -42,9 +42,9 @@
 
   var CONFIG = {
     startDelay: 420,        // ms before the head leaves its rest position
-    feed: 1180,             // nominal cutting speed, viewBox units / s
-    rapid: 2400,            // travel speed between letters
-    pierceDwell: 150,       // ms the beam rests on the spot before moving off
+    feed: 1750,             // nominal cutting speed, viewBox units / s
+    rapid: 3300,            // travel speed between letters
+    pierceDwell: 110,       // ms the beam rests on the spot before moving off
     cornerSlowdown: 5.2,    // how hard corners brake the feed
     minFeedRatio: 0.30,     // a corner never brings the head fully to a stop
     sampleStep: 2.2,        // arc-length resolution of the pre-baked path
@@ -393,6 +393,9 @@
     // ---- 1. stock: the material the beam has not reached yet ---------------
     // Everything inside the mask starts white (stock shown). The beam paints
     // black into it, which erases the stock and lets the photograph through.
+    // One masked sheet of uncut stock. Splitting it per letter was tried and is
+    // markedly worse: fourteen masked <image> layers cost more to composite than
+    // the single one costs to re-rasterise.
     this.stock = this.program.stock;
     if (this.stock) {
       this.stockSvg = this.layer('laser-fx--stock');
