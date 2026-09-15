@@ -1,17 +1,26 @@
 /* ---------------------------------------------------------------------------
    Laserski -- hero
    ---------------------------------------------------------------------------
-   The hero photograph is shown at its native aspect ratio and is never cropped,
-   scaled down or otherwise altered. The animation overlays sit in the same box
-   and carry the image's own viewBox, so they stay registered to the lettering
-   at every viewport width without a single hard-coded pixel offset.
+   The hero is composited from two photographs: a clean plate with no machine in
+   it, and the laser assembly cut out of the matching render as a sprite. The
+   animation moves the sprite, so the device follows the cut.
+
+   .hero__stage is the shared coordinate box. The plate and all four overlays
+   fill it exactly and carry the plate's own viewBox, so they scale as one and
+   nothing needs a hard-coded pixel offset.
+
+   Below 900px the overlay text moves out from on top of the plate and stacks
+   underneath it, so the whole word stays visible and the copy stays readable
+   rather than the plate being cropped down to three letters.
 --------------------------------------------------------------------------- */
 
 :root {
-  --ink: #0b0b0d;
-  --paper: #f4f2ef;
-  --muted: #9a9a9f;
+  --ink: #07070a;
+  --paper: #f2efeb;
+  --muted: #a3a09c;
+  --rule: rgba(242, 239, 235, 0.22);
   --hero-ratio: 1983 / 793;
+  --hero-h: clamp(540px, 60vw, 760px);
 }
 
 * { box-sizing: border-box; }
@@ -24,54 +33,58 @@ body {
   color: var(--paper);
   font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
   font-weight: 300;
+  line-height: 1.6;
 }
+
+img { max-width: 100%; }
+
+a { color: inherit; }
 
 /* --- hero ---------------------------------------------------------------- */
 
 .hero {
   position: relative;
   width: 100%;
-  background: #08080a;
+  background: #050507;
   overflow: hidden;
 }
 
-/* The stage is the shared coordinate box: the photograph and both SVG overlays
-   fill it exactly, so they scale and move as one element. */
+/* Narrow screens: the plate keeps its own proportions so the whole word stays
+   visible, and the copy stacks underneath it. */
 .hero__stage {
   position: relative;
   width: 100%;
   aspect-ratio: var(--hero-ratio);
+  overflow: hidden;
 }
 
-.hero__image {
+/* cover here is the exact counterpart of preserveAspectRatio="xMidYMid slice"
+   on the overlays, so plate and beam crop identically and stay registered. */
+.hero__plate {
   display: block;
   width: 100%;
   height: 100%;
-  /* No object-fit crop: the photograph is shown whole, exactly as authored. */
+  object-fit: cover;
+  object-position: center;
   border: 0;
 }
 
+/* Four overlays, all sharing the plate's box and viewBox. */
 .laser-fx {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   pointer-events: none;
-  overflow: visible;
 }
 
-/* The cooled kerf is a dark line, so it blends normally. */
-.laser-fx--kerf {
-  z-index: 2;
-  transition: opacity 120ms linear;
-}
+/* A cut is a dark line, and the machine is a solid object: both blend normally. */
+.laser-fx--kerf { z-index: 2; }
+.laser-fx--rig  { z-index: 4; }
 
-/* Everything hot only ever adds light, which is what keeps the glow reading as
-   part of the photograph instead of a layer sitting on top of it. */
-.laser-fx--glow {
-  z-index: 3;
-  mix-blend-mode: screen;
-}
+/* Heat and beam only ever add light, which keeps them inside the photograph. */
+.laser-fx--heat { z-index: 3; mix-blend-mode: screen; }
+.laser-fx--beam { z-index: 5; mix-blend-mode: screen; }
 
 .laser-fx__kerf {
   fill: none;
@@ -80,9 +93,130 @@ body {
   stroke-linejoin: round;
 }
 
-.laser-fx__head {
-  /* The head moves every frame; the particle layers do not need promoting. */
-  will-change: transform, opacity;
+/* The assembly moves every frame; the particle layers do not need promoting. */
+.laser-fx__rig { will-change: transform; }
+
+/* --- masthead ------------------------------------------------------------- */
+
+.masthead {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding: 22px clamp(18px, 4vw, 56px);
+}
+
+.wordmark {
+  font-size: clamp(17px, 2vw, 23px);
+  font-weight: 400;
+  letter-spacing: 0.34em;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: clamp(14px, 2.6vw, 38px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nav a {
+  font-size: 12px;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+  text-decoration: none;
+  padding-bottom: 5px;
+  border-bottom: 1px solid transparent;
+  transition: border-color 160ms, color 160ms;
+}
+
+.nav a:hover,
+.nav a[aria-current="page"] { border-bottom-color: currentColor; }
+
+.nav a:not([aria-current="page"]) { color: var(--muted); }
+
+.nav a:focus-visible,
+.wordmark:focus-visible,
+.cta:focus-visible { outline: 2px solid #ff9527; outline-offset: 4px; }
+
+/* --- hero copy ------------------------------------------------------------ */
+
+.hero__copy {
+  position: relative;
+  z-index: 10;
+  padding: 8px clamp(18px, 4vw, 56px) clamp(40px, 6vw, 72px);
+  max-width: 640px;
+}
+
+.eyebrow {
+  margin: 0 0 clamp(14px, 2vw, 24px);
+  font-size: 11px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.hero__title {
+  margin: 0 0 clamp(16px, 2.4vw, 26px);
+  font-size: clamp(30px, 5.4vw, 62px);
+  line-height: 1.08;
+  font-weight: 200;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+  text-wrap: balance;
+}
+
+.hero__title b { font-weight: 700; }
+
+.hero__lead {
+  margin: 0 0 clamp(22px, 3vw, 34px);
+  max-width: 46ch;
+  font-size: clamp(14px, 1.5vw, 17px);
+  color: #d6d2cd;
+}
+
+.cta {
+  display: inline-block;
+  padding: 14px 30px;
+  border: 1px solid var(--rule);
+  font-size: 12px;
+  letter-spacing: 0.19em;
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: border-color 160ms, background-color 160ms;
+}
+
+.cta:hover { border-color: var(--paper); background: rgba(242, 239, 235, 0.07); }
+
+/* From 900px up the masthead and copy sit over the plate, as designed. The
+   stage is taken out of flow so the copy sets the hero's height and the plate
+   covers whatever that turns out to be -- a grid cell would instead stretch the
+   plate off its aspect ratio and size the column to the nav's max-content. */
+@media (min-width: 900px) {
+  .hero { min-height: var(--hero-h); }
+
+  .hero__stage {
+    position: absolute;
+    inset: 0;
+    aspect-ratio: auto;
+  }
+
+  .hero__overlay {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: var(--hero-h);
+  }
+
+  .hero__copy { padding-bottom: clamp(48px, 7vw, 96px); }
 }
 
 /* --- page furniture below the hero, so the scroll behaviour is exercised --- */
@@ -90,28 +224,32 @@ body {
 .section {
   max-width: 1120px;
   margin: 0 auto;
-  padding: 96px 24px;
+  padding: clamp(56px, 9vw, 104px) clamp(18px, 4vw, 56px);
 }
 
 .section h2 {
   margin: 0 0 20px;
-  font-size: clamp(22px, 3.4vw, 34px);
+  font-size: clamp(20px, 3vw, 32px);
   font-weight: 400;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.15em;
   text-transform: uppercase;
 }
 
 .section p {
-  max-width: 60ch;
+  max-width: 62ch;
   margin: 0 0 14px;
   color: var(--muted);
   font-size: clamp(15px, 1.5vw, 17px);
   line-height: 1.75;
 }
 
-.section--tall { min-height: 90vh; }
+.section--tall { min-height: 88vh; }
 
 @media (prefers-reduced-motion: reduce) {
-  /* Belt and braces: the script removes the overlays, and so does the stylesheet. */
-  .laser-fx { display: none !important; }
+  /* The script keeps the assembly at rest and drops only the moving layers;
+     the stylesheet does the same, so a laser bed never loses its laser. */
+  .laser-fx--kerf,
+  .laser-fx--heat,
+  .laser-fx--beam { display: none !important; }
+  .nav a, .cta { transition: none; }
 }

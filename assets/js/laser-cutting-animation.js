@@ -1,17 +1,27 @@
 /**
  * LaserCuttingAnimation
  * ---------------------
- * A cinematic laser-cutting intro drawn on top of the hero photograph.
+ * A cinematic laser-cutting intro for the hero.
  *
- * The photograph is never touched. Everything here lives in two SVG overlays
- * that share the image's own coordinate system (viewBox 0 0 1983 793), so the
- * beam stays registered to the letters at every viewport size:
+ * The hero is composited from two photographs of the same scene: a clean plate
+ * with no machine in it, and the laser assembly cut out of the matching render
+ * as an RGBA sprite. The sprite is the thing that travels, so the device really
+ * does follow the cut rather than a glow sliding under a fixed head. Because the
+ * clean plate carries no baked-in beam light, every bit of heat on the material
+ * can travel with the beam.
  *
- *   #1  "kerf"  (normal blending)  -- the dark cooled cut left behind
- *   #2  "glow"  (screen blending)  -- heat, beam, sparks, smoke
+ * Four overlays share the plate's own coordinate system (viewBox 0 0 1983 793),
+ * so everything stays registered to the letters at any viewport size:
  *
- * Screen blending is what keeps the glow sitting *inside* the photograph
- * instead of on top of it: it can only add light, never flatten the image.
+ *   1  kerf  (normal)  the dark cooled cut left behind
+ *   2  heat  (screen)  the cooling gradient, masked to what has been cut
+ *   3  rig   (normal)  the laser assembly -- an object, so it occludes the plate
+ *   4  beam  (screen)  beam, contact flare, light pool, sparks, smoke
+ *
+ * Screen blending on 2 and 4 is what keeps the light sitting *inside* the
+ * photograph: it can only add light, never flatten the image. The rig sits
+ * between them because the machine is in front of the material but behind the
+ * sparks that fly off it.
  *
  * Usage:  LaserCuttingAnimation.create(document.querySelector('.hero'))
  * Auto-inits on DOMContentLoaded for any [data-laser-hero] element.
@@ -22,16 +32,22 @@
   var SVG_NS = 'http://www.w3.org/2000/svg';
 
   var CONFIG = {
-    startDelay: 420,        // ms before the first pierce (spec: 300-500ms)
-    feed: 1180,              // nominal cutting speed, viewBox units / s
-    rapid: 2800,            // travel speed between letters
-    pierceDwell: 130,       // ms the beam rests before it starts moving
+    startDelay: 420,        // ms before the head leaves its rest position
+    feed: 1180,             // nominal cutting speed, viewBox units / s
+    rapid: 2400,            // travel speed between letters
+    pierceDwell: 150,       // ms the beam rests on the spot before moving off
     cornerSlowdown: 5.2,    // how hard corners brake the feed
     minFeedRatio: 0.30,     // a corner never brings the head fully to a stop
     sampleStep: 2.2,        // arc-length resolution of the pre-baked path
     heatRadius: 205,        // reach of the cooling gradient behind the head
     coolOutMs: 1500,        // fade of the finished cut, once the run completes
-    residualCut: 0,         // kerf opacity left behind (0 = pristine photo)
+
+    standoff: 19,           // gap from nozzle to material, in image units
+    travelLift: 15,         // how far the head rises on a travel move
+    bobAmp: 0.9,            // machine vibration while cutting
+    bobHz: 5.5,
+    perspective: 0.8,       // how much of the plate's depth scaling the head takes
+
     sparks: { pool: 52, rate: 108, life: [0.26, 0.62], speed: [150, 430] },
     sparksMobile: { pool: 20, rate: 40, life: [0.22, 0.48], speed: [120, 330] },
     smokePuffs: 5,
@@ -119,8 +135,8 @@
     };
   }
 
-  // A travel move: an arc that lifts away from the material between letters,
-  // eased in and out so the head never teleports.
+  // A travel move: an arc the head takes with the beam off, eased in and out so
+  // the assembly never teleports between letters.
   function bakeTravel(from, to) {
     var dx = to[0] - from[0], dy = to[1] - from[1];
     var dist = Math.hypot(dx, dy) || 1;
@@ -134,7 +150,7 @@
       xs[i] = u * u * from[0] + 2 * u * t * mid[0] + t * t * to[0];
       ys[i] = u * u * from[1] + 2 * u * t * mid[1] + t * t * to[1];
     }
-    return { xs: xs, ys: ys, count: count, duration: dist / CONFIG.rapid + 0.10 };
+    return { xs: xs, ys: ys, count: count, duration: dist / CONFIG.rapid + 0.14 };
   }
 
   // ---------------------------------------------------------------------------
@@ -194,7 +210,6 @@
   };
 
   SparkPool.prototype.update = function (dt) {
-    var any = false;
     for (var i = 0; i < this.opts.pool; i++) {
       var n = this.nodes[i];
       if (!this.live[i]) continue;
@@ -206,7 +221,6 @@
         n.setAttribute('stroke-opacity', '0');
         continue;
       }
-      any = true;
       this.px[i] = this.x[i];
       this.py[i] = this.y[i];
       this.vy[i] += 700 * dt;                    // gravity
@@ -216,18 +230,16 @@
       this.y[i] += this.vy[i] * dt;
 
       // Hot white -> amber -> dull red as the particle loses heat.
-      var r = 255;
       var g = Math.round(lerp(238, 96, Math.pow(t, 0.7)));
       var b = Math.round(lerp(196, 26, Math.pow(t, 0.45)));
       n.setAttribute('x1', this.px[i].toFixed(1));
       n.setAttribute('y1', this.py[i].toFixed(1));
       n.setAttribute('x2', this.x[i].toFixed(1));
       n.setAttribute('y2', this.y[i].toFixed(1));
-      n.setAttribute('stroke', 'rgb(' + r + ',' + g + ',' + b + ')');
+      n.setAttribute('stroke', 'rgb(255,' + g + ',' + b + ')');
       n.setAttribute('stroke-width', (this.size[i] * (1 - t * 0.45)).toFixed(2));
       n.setAttribute('stroke-opacity', ((1 - t) * (1 - t) * 0.95).toFixed(3));
     }
-    return any;
   };
 
   SparkPool.prototype.clear = function () {
@@ -283,14 +295,12 @@
   };
 
   Smoke.prototype.update = function (dt) {
-    var any = false;
     for (var i = 0; i < this.n; i++) {
       if (!this.live[i]) continue;
       this.age[i] += dt;
       var t = this.age[i] / this.life[i];
       var n = this.nodes[i];
       if (t >= 1) { this.live[i] = 0; this.active--; n.setAttribute('opacity', '0'); continue; }
-      any = true;
       this.x[i] += this.vx[i] * dt;
       this.y[i] += this.vy[i] * dt;
       n.setAttribute('cx', this.x[i].toFixed(1));
@@ -299,7 +309,6 @@
       // Rise, spread, and thin out; never dense enough to veil the lettering.
       n.setAttribute('opacity', (Math.sin(Math.min(1, t * 1.6) * Math.PI) * 0.16).toFixed(3));
     }
-    return any;
   };
 
   Smoke.prototype.clear = function () {
@@ -329,6 +338,7 @@
     this.targetRate = 0;
     this.raf = 0;
     this.lastT = 0;
+    this.clock = 0;            // seconds of animated time, for the vibration
     this.elapsed = 0;          // ms of programme time consumed
     this.tailT = 0;            // seconds since the run finished
     this.pageHidden = false;
@@ -353,34 +363,35 @@
     document.addEventListener('visibilitychange', this.onVisibility);
   }
 
+  LaserCuttingAnimation.prototype.layer = function (cls) {
+    var svg = el('svg', {
+      'class': 'laser-fx ' + cls, viewBox: this.program.viewBox.join(' '),
+      preserveAspectRatio: 'xMidYMid slice', 'aria-hidden': 'true', focusable: 'false'
+    });
+    this.stage.appendChild(svg);
+    return svg;
+  };
+
   LaserCuttingAnimation.prototype.build = function () {
-    var vb = this.program.viewBox.join(' ');
     var u = this.uid;
+    var vb = this.program.viewBox;
+    var head = this.program.head;
     var mobile = this.mobileQuery.matches;
+    var self = this;
 
-    // ---- Layer 1: the kerf. Normal blending, because a cut is a dark line. ---
-    var kerfSvg = el('svg', {
-      'class': 'laser-fx laser-fx--kerf', viewBox: vb,
-      preserveAspectRatio: 'xMidYMid meet', 'aria-hidden': 'true', focusable: 'false'
-    });
+    // ---- 1. kerf: a cut is a dark line, so it blends normally ---------------
+    this.kerfSvg = this.layer('laser-fx--kerf');
     var kerfGroup = el('g', { 'class': 'laser-fx__kerf' });
-    kerfSvg.appendChild(kerfGroup);
+    this.kerfSvg.appendChild(kerfGroup);
 
-    // ---- Layer 2: everything luminous. Screen blending, so the light adds
-    //      into the photograph rather than covering it. -------------------------
-    var glowSvg = el('svg', {
-      'class': 'laser-fx laser-fx--glow', viewBox: vb,
-      preserveAspectRatio: 'xMidYMid meet', 'aria-hidden': 'true', focusable: 'false'
-    });
+    // ---- 2. heat: masked to what has been cut, coloured by distance from the
+    //        beam, so the kerf reads white-hot -> amber -> cooled ------------
+    this.heatSvg = this.layer('laser-fx--heat');
     var defs = el('defs');
-    glowSvg.appendChild(defs);
+    this.heatSvg.appendChild(defs);
 
-    // Heat gradient, anchored to the head in image space. Everything the mask
-    // reveals is coloured by distance from the beam, which is what produces
-    // "white-hot at the point -> amber -> dull red -> cold" along the kerf.
     var heat = el('radialGradient', {
-      id: u + '-heat', gradientUnits: 'userSpaceOnUse',
-      cx: 0, cy: 0, r: CONFIG.heatRadius
+      id: u + '-heat', gradientUnits: 'userSpaceOnUse', cx: 0, cy: 0, r: CONFIG.heatRadius
     });
     [['0', '#fff7e6', '1'], ['0.03', '#ffd58c', '0.88'], ['0.08', '#ff9527', '0.60'],
      ['0.20', '#e2490c', '0.26'], ['0.45', '#8e2703', '0.09'], ['1', '#2a0700', '0']
@@ -390,70 +401,116 @@
     defs.appendChild(heat);
     this.heatGrad = heat;
 
-    // The mask that makes the heat appear only where the beam has already been.
-    var mask = el('mask', {
-      id: u + '-cut', maskUnits: 'userSpaceOnUse',
-      x: this.program.viewBox[0], y: this.program.viewBox[1],
-      width: this.program.viewBox[2], height: this.program.viewBox[3]
-    });
+    // No explicit mask region: it then defaults to the masked rect's own box
+    // (+20%), which tracks the beam, instead of being pinned to the whole plate
+    // and rasterising 1983x793 of mask every frame.
+    var mask = el('mask', { id: u + '-cut' });
     var maskGroup = el('g', {
       fill: 'none', stroke: '#fff', 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
     });
     mask.appendChild(maskGroup);
     defs.appendChild(mask);
 
-    // Beam glow + spark + smoke gradients.
-    function radial(id, stops) {
+    // Sized to the gradient's reach each frame rather than to the whole plate:
+    // a masked, gradient-filled rect is re-rasterised on every change, and at
+    // full-frame size that alone costs about a third of the frame budget.
+    this.heatLayer = el('rect', {
+      x: 0, y: 0, width: 0, height: 0,
+      fill: 'url(#' + u + '-heat)', mask: 'url(#' + u + '-cut)'
+    });
+    this.heatSvg.appendChild(this.heatLayer);
+
+    // ---- 3. rig: the assembly itself, cut from the matching photograph ------
+    this.rigSvg = this.layer('laser-fx--rig');
+    this.rig = el('g', { 'class': 'laser-fx__rig' });
+    this.rigSvg.appendChild(this.rig);
+    // A soft shadow under the nozzle so the head is not floating on the plate.
+    var rigDefs = el('defs');
+    this.rigSvg.appendChild(rigDefs);
+    rigDefs.appendChild(radialGrad(u + '-shadow', [
+      ['0', '#000', '0.5'], ['0.55', '#000', '0.22'], ['1', '#000', '0']
+    ]));
+    this.shadow = el('ellipse', { rx: 44, ry: 13, fill: 'url(#' + u + '-shadow)', opacity: '0' });
+    this.rigSvg.insertBefore(this.shadow, this.rig);
+    this.headImage = el('image', {
+      x: 0, y: 0, width: head.box[2], height: head.box[3],
+      href: head.src, preserveAspectRatio: 'none'
+    });
+    // Older WebKit still wants the namespaced form.
+    this.headImage.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', head.src);
+    this.rig.appendChild(this.headImage);
+
+    // ---- 4. beam and everything hot, in front of the rig --------------------
+    this.beamSvg = this.layer('laser-fx--beam');
+    var bDefs = el('defs');
+    this.beamSvg.appendChild(bDefs);
+
+    function radialGrad(id, stops) {
       var g = el('radialGradient', { id: id });
       stops.forEach(function (s) {
         g.appendChild(el('stop', { offset: s[0], 'stop-color': s[1], 'stop-opacity': s[2] }));
       });
-      defs.appendChild(g);
+      return g;
     }
-    radial(u + '-bloom', [['0', '#ffc071', '0.78'], ['0.3', '#ff8320', '0.30'],
-                          ['0.65', '#c33a02', '0.09'], ['1', '#000', '0']]);
-    radial(u + '-core', [['0', '#ffffff', '1'], ['0.28', '#fff3c4', '0.98'],
-                         ['0.55', '#ffb347', '0.55'], ['1', '#ff7a10', '0']]);
-    radial(u + '-smoke', [['0', '#b9b2ab', '0.55'], ['0.5', '#8d8781', '0.22'], ['1', '#6b6663', '0']]);
+    bDefs.appendChild(radialGrad(u + '-pool', [
+      ['0', '#ffdfb2', '0.80'], ['0.22', '#ffa245', '0.44'],
+      ['0.55', '#d85a09', '0.17'], ['1', '#000', '0']
+    ]));
+    bDefs.appendChild(radialGrad(u + '-bloom', [
+      ['0', '#ffc071', '0.78'], ['0.3', '#ff8320', '0.30'],
+      ['0.65', '#c33a02', '0.09'], ['1', '#000', '0']
+    ]));
+    bDefs.appendChild(radialGrad(u + '-core', [
+      ['0', '#ffffff', '1'], ['0.28', '#fff3c4', '0.98'],
+      ['0.55', '#ffb347', '0.55'], ['1', '#ff7a10', '0']
+    ]));
+    bDefs.appendChild(radialGrad(u + '-smoke', [
+      ['0', '#b9b2ab', '0.55'], ['0.5', '#8d8781', '0.22'], ['1', '#6b6663', '0']
+    ]));
 
-    var heatLayer = el('rect', {
-      x: this.program.viewBox[0], y: this.program.viewBox[1],
-      width: this.program.viewBox[2], height: this.program.viewBox[3],
-      fill: 'url(#' + u + '-heat)', mask: 'url(#' + u + '-cut)'
+    var beamGrad = el('linearGradient', { id: u + '-beam', x1: 0, y1: 0, x2: 0, y2: 1 });
+    [['0', '#ffb765', '0.05'], ['0.45', '#ffd89a', '0.40'], ['1', '#fffdf4', '0.92']
+    ].forEach(function (s) {
+      beamGrad.appendChild(el('stop', { offset: s[0], 'stop-color': s[1], 'stop-opacity': s[2] }));
     });
-    glowSvg.appendChild(heatLayer);
-    this.heatLayer = heatLayer;
+    bDefs.appendChild(beamGrad);
+
+    // The pool of light the beam throws onto the material, flattened by the
+    // plate's perspective. This is what travels with the cut.
+    this.pool = el('ellipse', { rx: 62, ry: 21, fill: 'url(#' + u + '-pool)', opacity: '0' });
+    this.beamSvg.appendChild(this.pool);
+
+    this.beam = el('g', { opacity: '0' });
+    this.beamShaft = el('path', { fill: 'url(#' + u + '-beam)' });
+    this.beamHalo = el('path', { fill: 'url(#' + u + '-beam)', opacity: '0.35' });
+    this.beam.appendChild(this.beamHalo);
+    this.beam.appendChild(this.beamShaft);
+    this.beamSvg.appendChild(this.beam);
 
     var smokeLayer = el('g', { 'class': 'laser-fx__smoke' });
-    glowSvg.appendChild(smokeLayer);
+    this.beamSvg.appendChild(smokeLayer);
 
-    // The head: soft bloom, tight glow, a small cross flare, white core.
-    var head = el('g', { 'class': 'laser-fx__head', opacity: '0' });
-    this.headBloom = el('circle', { r: 34, fill: 'url(#' + u + '-bloom)' });
-    this.headFlare = el('g', { opacity: '0.55' });
-    this.headFlare.appendChild(el('ellipse', { rx: 31, ry: 0.9, fill: 'url(#' + u + '-core)' }));
-    this.headFlare.appendChild(el('ellipse', { rx: 0.9, ry: 19, fill: 'url(#' + u + '-core)' }));
-    this.headCore = el('circle', { r: 8.2, fill: 'url(#' + u + '-core)' });
-    this.headHot = el('circle', { r: 2.4, fill: '#fffdf6' });
-    head.appendChild(this.headBloom);
-    head.appendChild(this.headFlare);
-    head.appendChild(this.headCore);
-    head.appendChild(this.headHot);
-    glowSvg.appendChild(head);
-    this.head = head;
+    this.contact = el('g', { opacity: '0' });
+    this.contactBloom = el('circle', { r: 34, fill: 'url(#' + u + '-bloom)' });
+    this.contactFlare = el('g', { opacity: '0.62' });
+    this.contactFlare.appendChild(el('ellipse', { rx: 31, ry: 0.9, fill: 'url(#' + u + '-core)' }));
+    this.contactFlare.appendChild(el('ellipse', { rx: 0.9, ry: 19, fill: 'url(#' + u + '-core)' }));
+    this.contactCore = el('circle', { r: 8.2, fill: 'url(#' + u + '-core)' });
+    this.contactHot = el('circle', { r: 2.4, fill: '#fffdf6' });
+    this.contact.appendChild(this.contactBloom);
+    this.contact.appendChild(this.contactFlare);
+    this.contact.appendChild(this.contactCore);
+    this.contact.appendChild(this.contactHot);
+    this.beamSvg.appendChild(this.contact);
 
     var sparkLayer = el('g', { 'class': 'laser-fx__sparks', fill: 'none' });
-    glowSvg.appendChild(sparkLayer);
+    this.beamSvg.appendChild(sparkLayer);
 
-    this.stage.appendChild(kerfSvg);
-    this.stage.appendChild(glowSvg);
-    this.kerfSvg = kerfSvg;
-    this.glowSvg = glowSvg;
-
-    // ---- Build the programme: cut segments interleaved with travel moves. ----
+    // ---- the programme: home -> every letter -> home ------------------------
     this.steps = [];
-    var cursor = this.program.leadIn.slice();
-    var self = this;
+    var cursor = head.home.slice();
+    var homeScale = this.program.homeScale || 1;
+    var prevScale = homeScale;
 
     this.program.segments.forEach(function (seg, i) {
       var kerfPath = el('path', { d: seg.d, 'class': 'laser-fx__kerf-line' });
@@ -462,7 +519,6 @@
       maskGroup.appendChild(maskPath);
 
       var baked = bakePath(maskPath, true);
-      // Hide both paths until the beam reaches them.
       [kerfPath, maskPath].forEach(function (p) {
         p.setAttribute('stroke-dasharray', baked.total + ' ' + (baked.total + 1));
         p.setAttribute('stroke-dashoffset', baked.total);
@@ -473,14 +529,24 @@
       var start = [baked.xs[0], baked.ys[0]];
       var travel = bakeTravel(cursor, start);
       self.steps.push({
-        type: 'travel', baked: travel, duration: travel.duration * 1000, scale: seg.scale
+        type: 'travel', baked: travel, duration: travel.duration * 1000,
+        fromScale: prevScale, toScale: seg.scale
       });
-      self.steps.push({ type: 'pierce', duration: CONFIG.pierceDwell, at: start, scale: seg.scale, index: i });
+      prevScale = seg.scale;
+      self.steps.push({ type: 'pierce', duration: CONFIG.pierceDwell, at: start, scale: seg.scale });
       self.steps.push({
         type: 'cut', baked: baked, duration: baked.duration * 1000,
-        scale: seg.scale, kerfPath: kerfPath, maskPath: maskPath, index: i
+        scale: seg.scale, kerfPath: kerfPath, maskPath: maskPath
       });
       cursor = start;                 // a closed loop finishes where it started
+    });
+
+    // Park the head back where the photograph had it, so the hero settles
+    // exactly into the still image it started from.
+    var back = bakeTravel(cursor, head.home);
+    this.steps.push({
+      type: 'travel', baked: back, duration: back.duration * 1000,
+      fromScale: prevScale, toScale: homeScale, parking: true
     });
 
     this.totalDuration = this.steps.reduce(function (a, s) { return a + s.duration; }, 0);
@@ -489,7 +555,15 @@
     this.sparks = new SparkPool(sparkLayer, sparkOpts);
     this.smoke = new Smoke(smokeLayer, u + '-smoke', mobile ? CONFIG.smokePuffsMobile : CONFIG.smokePuffs);
 
+    // Rest state: the assembly sits where the photograph had it, beam off.
+    this.rest();
     this.root.setAttribute('data-laser-state', 'idle');
+  };
+
+  /** Put the assembly back exactly where the photograph had it, beam off. */
+  LaserCuttingAnimation.prototype.rest = function () {
+    var head = this.program.head;
+    this.placeRig(head.home[0], head.home[1], 0, 0, this.program.homeScale || 1);
   };
 
   // --- scroll / visibility -----------------------------------------------------
@@ -536,7 +610,6 @@
       this.stop();
       this.sparks.clear();
       this.smoke.clear();
-      this.head.setAttribute('opacity', '0');
       return;
     }
     if (this.targetRate > 0 || this.rate > 0.001) this.start();
@@ -554,7 +627,7 @@
     if (this.state === 'idle') {
       this.state = 'running';
       this.root.setAttribute('data-laser-state', 'running');
-      this.elapsed = -CONFIG.startDelay;      // the beat before the first pierce
+      this.elapsed = -CONFIG.startDelay;      // the beat before the head sets off
     }
     this.schedule();
   };
@@ -580,6 +653,7 @@
     if (this.rate < 0.002 && this.targetRate === 0) this.rate = 0;
 
     var scaled = dt * this.rate;
+    this.clock += scaled;
 
     if (this.state === 'running') {
       this.elapsed += scaled * 1000;
@@ -622,12 +696,12 @@
   };
 
   LaserCuttingAnimation.prototype.render = function (dt) {
-    if (this.elapsed < 0) { this.head.setAttribute('opacity', '0'); return; }
+    if (this.elapsed < 0) { this.rest(); return; }
 
     var found = this.locate();
     if (!found) return;
     var step = found.step, local = found.local;
-    var x, y, dirX = 1, dirY = 0, cutting = false, intensity = 0;
+    var x, y, dirX = 1, dirY = 0, cutting = false, intensity = 0, lift = 0;
 
     if (step.type === 'travel') {
       var b = step.baked;
@@ -637,7 +711,10 @@
       x = lerp(b.xs[i0], b.xs[i1], u);
       y = lerp(b.ys[i0], b.ys[i1], u);
       dirX = b.xs[i1] - b.xs[i0]; dirY = b.ys[i1] - b.ys[i0];
-      intensity = 0;
+      // The head rises off the material and settles back onto it, growing or
+      // shrinking on the way so it matches the depth of where it lands.
+      lift = Math.sin(local * Math.PI) * CONFIG.travelLift;
+      step.scale = lerp(step.fromScale, step.toScale, easeInOut(local));
     } else if (step.type === 'pierce') {
       x = step.at[0]; y = step.at[1];
       // Power ramps in, then the pierce blows a small burst of material out.
@@ -675,13 +752,19 @@
     var len = Math.hypot(dirX, dirY) || 1;
     dirX /= len; dirY /= len;
 
-    this.placeHead(x, y, step.scale, step.type === 'travel' ? 0.12 : 0.35 + 0.65 * intensity,
-                   step.type === 'travel');
+    this.placeRig(x, y, lift, intensity, step.scale);
 
     // Heat follows the beam; everything already cut cools by distance from it.
+    var R = CONFIG.heatRadius * step.scale;
     this.heatGrad.setAttribute('cx', x.toFixed(1));
     this.heatGrad.setAttribute('cy', y.toFixed(1));
-    this.heatGrad.setAttribute('r', (CONFIG.heatRadius * step.scale).toFixed(1));
+    this.heatGrad.setAttribute('r', R.toFixed(1));
+    // Past r the gradient is fully transparent, so nothing outside this box can
+    // paint and there is no reason to rasterise it.
+    this.heatLayer.setAttribute('x', (x - R).toFixed(1));
+    this.heatLayer.setAttribute('y', (y - R).toFixed(1));
+    this.heatLayer.setAttribute('width', (R * 2).toFixed(1));
+    this.heatLayer.setAttribute('height', (R * 2).toFixed(1));
 
     if (cutting && this.rate > 0.02) {
       this.sparks.emitOver(dt, x, y, dirX, dirY, step.scale, intensity * this.rate);
@@ -691,14 +774,72 @@
     this.smoke.update(dt);
   };
 
-  LaserCuttingAnimation.prototype.placeHead = function (x, y, scale, opacity, lifted) {
-    this.head.setAttribute('transform',
+  /**
+   * Put the assembly on the plate with its beam exit at (x, y).
+   *
+   * `lift` raises it off the material on travel moves; `power` (0..1) drives the
+   * beam, the light pool and the contact flare, all of which stay at (x, y) --
+   * the point being cut -- rather than following the body of the machine.
+   */
+  LaserCuttingAnimation.prototype.placeRig = function (x, y, lift, power, scale) {
+    scale = scale || 1;
+    var head = this.program.head;
+    var tx = head.tip[0], ty = head.tip[1];
+
+    // The machine stands on the same receding plate as the letters, so it reads
+    // smaller up by the L and bigger down at the I. Scaling about the beam exit
+    // keeps the nozzle on the cut point whatever the size.
+    var rel = scale / (this.program.homeScale || 1);
+    var rigScale = 1 + (rel - 1) * CONFIG.perspective;
+
+    // A touch of machine vibration while the beam is actually burning.
+    var bob = power > 0.05
+      ? Math.sin(this.clock * CONFIG.bobHz * 6.283) * CONFIG.bobAmp * power
+      : 0;
+    var ry = y - lift + bob;
+
+    this.rig.setAttribute('transform',
+      'translate(' + x.toFixed(2) + ' ' + ry.toFixed(2) + ') ' +
+      'scale(' + rigScale.toFixed(4) + ') ' +
+      'translate(' + (-tx) + ' ' + (-ty) + ')');
+
+    // Shadow sits on the material, so it tracks x/y but not the lift; it only
+    // spreads and softens as the head rises.
+    var spread = 1 + lift / CONFIG.travelLift * 0.35;
+    this.shadow.setAttribute('cx', x.toFixed(1));
+    this.shadow.setAttribute('cy', (y + 6 * scale).toFixed(1));
+    this.shadow.setAttribute('rx', (44 * scale * spread).toFixed(1));
+    this.shadow.setAttribute('ry', (13 * scale * spread).toFixed(1));
+    this.shadow.setAttribute('opacity', (0.5 / spread).toFixed(3));
+
+    if (power <= 0.005) {
+      this.beam.setAttribute('opacity', '0');
+      this.pool.setAttribute('opacity', '0');
+      this.contact.setAttribute('opacity', '0');
+      return;
+    }
+
+    // Beam: a narrow taper from the nozzle down to where it meets the material.
+    var gap = (CONFIG.standoff + lift) * scale;
+    var top = y - gap;
+    var wTop = 1.9 * scale, wBot = 0.75 * scale;
+    this.beamShaft.setAttribute('d',
+      'M' + (x - wTop) + ' ' + top + 'L' + (x + wTop) + ' ' + top +
+      'L' + (x + wBot) + ' ' + y + 'L' + (x - wBot) + ' ' + y + 'Z');
+    this.beamHalo.setAttribute('d',
+      'M' + (x - wTop * 3.2) + ' ' + top + 'L' + (x + wTop * 3.2) + ' ' + top +
+      'L' + (x + wBot * 3) + ' ' + y + 'L' + (x - wBot * 3) + ' ' + y + 'Z');
+    this.beam.setAttribute('opacity', power.toFixed(3));
+
+    this.pool.setAttribute('cx', x.toFixed(1));
+    this.pool.setAttribute('cy', y.toFixed(1));
+    this.pool.setAttribute('rx', (62 * scale).toFixed(1));
+    this.pool.setAttribute('ry', (21 * scale).toFixed(1));
+    this.pool.setAttribute('opacity', (power * 0.9).toFixed(3));
+
+    this.contact.setAttribute('transform',
       'translate(' + x.toFixed(1) + ' ' + y.toFixed(1) + ') scale(' + scale.toFixed(3) + ')');
-    this.head.setAttribute('opacity', opacity.toFixed(3));
-    // Off the material the beam reads as a dim pilot dot, not a cutting point.
-    this.headFlare.setAttribute('opacity', lifted ? '0' : '0.62');
-    this.headCore.setAttribute('r', (lifted ? 3.4 : 8.2).toFixed(2));
-    this.headBloom.setAttribute('r', (lifted ? 13 : 34).toFixed(1));
+    this.contact.setAttribute('opacity', (0.35 + 0.65 * power).toFixed(3));
   };
 
   LaserCuttingAnimation.prototype.finish = function () {
@@ -709,19 +850,18 @@
     // parks it; renderTail() drops it once there is nothing left to draw.
   };
 
-  /** After the last letter: the beam shuts off and the kerf cools away. */
+  /** After the last letter: the head is home, the beam is off, the kerf cools. */
   LaserCuttingAnimation.prototype.renderTail = function (dt) {
     var t = clamp(this.tailT / (CONFIG.coolOutMs / 1000), 0, 1);
     var fade = 1 - easeInOut(t);
-    this.head.setAttribute('opacity', (fade * 0.5).toFixed(3));
+    this.rest();
     this.heatLayer.setAttribute('opacity', fade.toFixed(3));
-    this.kerfSvg.style.opacity = (CONFIG.residualCut + (1 - CONFIG.residualCut) * fade).toFixed(3);
+    this.kerfSvg.style.opacity = fade.toFixed(3);
     this.sparks.update(dt);
     this.smoke.update(dt);
     if (t >= 1) {
       this.sparks.clear();
       this.smoke.clear();
-      this.head.setAttribute('opacity', '0');
       // Nothing can move again: release the observer and let the loop die.
       if (this.io) { this.io.disconnect(); this.io = null; }
     }
@@ -729,12 +869,17 @@
 
   // --- reduced motion ----------------------------------------------------------
 
+  /**
+   * With reduced motion the hero is the still photograph: plate plus the
+   * assembly at rest. Only the moving layers go away -- pulling the rig too
+   * would leave a laser bed with no laser in it.
+   */
   LaserCuttingAnimation.prototype.applyReducedMotion = function (on) {
     this.reduced = on;
     if (!on) {
-      // The setting can be turned off mid-session; put the overlays back.
       this.kerfSvg.style.display = '';
-      this.glowSvg.style.display = '';
+      this.heatSvg.style.display = '';
+      this.beamSvg.style.display = '';
       this.root.setAttribute('data-laser-state', this.state);
       this.sync();
       return;
@@ -742,8 +887,10 @@
     this.stop();
     this.sparks.clear();
     this.smoke.clear();
+    this.rest();
     this.kerfSvg.style.display = 'none';
-    this.glowSvg.style.display = 'none';
+    this.heatSvg.style.display = 'none';
+    this.beamSvg.style.display = 'none';
     this.root.setAttribute('data-laser-state', 'reduced');
   };
 
@@ -756,8 +903,10 @@
     } else if (this.reduceQuery.removeListener) {
       this.reduceQuery.removeListener(this.onMotionChange);
     }
-    if (this.kerfSvg.parentNode) this.kerfSvg.parentNode.removeChild(this.kerfSvg);
-    if (this.glowSvg.parentNode) this.glowSvg.parentNode.removeChild(this.glowSvg);
+    var self = this;
+    [this.kerfSvg, this.heatSvg, this.rigSvg, this.beamSvg].forEach(function (s) {
+      if (s && s.parentNode) s.parentNode.removeChild(s);
+    });
   };
 
   var API = {

@@ -1,0 +1,2 @@
+# Diagnostic overlays written by the tools/ scripts; regenerate by running them.
+tools/verify-*.png
