@@ -46,7 +46,7 @@
     rapid: 3300,            // travel speed between letters
     pierceDwell: 110,       // ms the beam rests on the spot before moving off
     endDwell: 200,          // beat after the last piece is free, before parking
-    parkFeed: 500,          // the park move home is slower than a rapid on purpose
+    parkMs: 808,            // the park move back to the first cut, timed not fed
     cornerSlowdown: 5.2,    // how hard corners brake the feed
     minFeedRatio: 0.30,     // a corner never brings the head fully to a stop
     sampleStep: 2.2,        // arc-length resolution of the pre-baked path
@@ -602,6 +602,9 @@
         scale: seg.scale, kerfPath: kerfPath, maskPath: maskPath, cutPath: cutPath
       };
       self.steps.push(cutStep);
+      // Where the beam first touched the sheet. Not the head's rest position:
+      // that is where the machine parks, this is where the work starts.
+      if (!self.firstCut) self.firstCut = { at: start.slice(), scale: seg.scale };
       if (freePath) self.pendingReleases.push({ node: freePath, step: cutStep, last: -1 });
       cursor = start;                 // a closed loop finishes where it started
     });
@@ -612,15 +615,19 @@
       type: 'hold', duration: CONFIG.endDwell, at: cursor.slice(), scale: prevScale
     });
 
-    // Park the head back where the photograph had it, so the hero settles
-    // exactly into the still image it started from. Deliberately slower than the
-    // rapids between letters: this one is the move the eye is meant to follow,
-    // and like every travel step it runs with the beam off, so it reads as
+    // Back to where the beam first touched the sheet, so the run closes on the
+    // frame it opened with. The destination is the first cut point, not
+    // head.home -- the head's rest position is 1200 units away from it, at a
+    // different depth, and landing there would put the nozzle nowhere near the
+    // L. Timed rather than fed: this leg is four times the length of the old
+    // one, so a fixed feed would stretch it to three and a half seconds.
+    // Like every travel step it runs with the beam off, so it reads as
     // repositioning rather than another pass.
-    var back = bakeTravel(cursor, head.home, CONFIG.parkFeed);
+    this.park = this.firstCut || { at: head.home.slice(), scale: homeScale };
+    var back = bakeTravel(cursor, this.park.at);
     this.steps.push({
-      type: 'travel', baked: back, duration: back.duration * 1000,
-      fromScale: prevScale, toScale: homeScale, parking: true
+      type: 'travel', baked: back, duration: CONFIG.parkMs,
+      fromScale: prevScale, toScale: this.park.scale, parking: true
     });
 
     var at = 0;
@@ -644,6 +651,15 @@
   LaserCuttingAnimation.prototype.rest = function () {
     var head = this.program.head;
     this.placeRig(head.home[0], head.home[1], 0, 0, this.program.homeScale || 1);
+  };
+
+  /**
+   * Hold the pose the park move lands in: nozzle on the first cut point, at that
+   * point's own depth, beam off. The tail redraws every frame, so without this
+   * it would pull the head back to rest and undo the move it just watched.
+   */
+  LaserCuttingAnimation.prototype.parked = function () {
+    this.placeRig(this.park.at[0], this.park.at[1], 0, 0, this.park.scale);
   };
 
   // --- scroll / visibility -----------------------------------------------------
@@ -956,7 +972,7 @@
   LaserCuttingAnimation.prototype.renderTail = function (dt) {
     var t = clamp(this.tailT / (CONFIG.coolOutMs / 1000), 0, 1);
     var fade = 1 - easeInOut(t);
-    this.rest();
+    this.parked();
     this.releaseFinished();
     this.heatLayer.setAttribute('opacity', fade.toFixed(3));
     this.kerfSvg.style.opacity = fade.toFixed(3);
