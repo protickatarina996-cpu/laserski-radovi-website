@@ -45,6 +45,8 @@
     feed: 1750,             // nominal cutting speed, viewBox units / s
     rapid: 3300,            // travel speed between letters
     pierceDwell: 110,       // ms the beam rests on the spot before moving off
+    endDwell: 200,          // beat after the last piece is free, before parking
+    parkFeed: 500,          // the park move home is slower than a rapid on purpose
     cornerSlowdown: 5.2,    // how hard corners brake the feed
     minFeedRatio: 0.30,     // a corner never brings the head fully to a stop
     sampleStep: 2.2,        // arc-length resolution of the pre-baked path
@@ -148,7 +150,7 @@
 
   // A travel move: an arc the head takes with the beam off, eased in and out so
   // the assembly never teleports between letters.
-  function bakeTravel(from, to) {
+  function bakeTravel(from, to, speed) {
     var dx = to[0] - from[0], dy = to[1] - from[1];
     var dist = Math.hypot(dx, dy) || 1;
     var lift = Math.min(38, dist * 0.30);
@@ -161,7 +163,8 @@
       xs[i] = u * u * from[0] + 2 * u * t * mid[0] + t * t * to[0];
       ys[i] = u * u * from[1] + 2 * u * t * mid[1] + t * t * to[1];
     }
-    return { xs: xs, ys: ys, count: count, duration: dist / CONFIG.rapid + 0.14 };
+    return { xs: xs, ys: ys, count: count,
+             duration: dist / (speed || CONFIG.rapid) + 0.14 };
   }
 
   // ---------------------------------------------------------------------------
@@ -603,9 +606,18 @@
       cursor = start;                 // a closed loop finishes where it started
     });
 
+    // A beat once the last piece is free: the cut wants a moment to land before
+    // the machine moves again. Beam off, head still -- this holds, it does not cut.
+    this.steps.push({
+      type: 'hold', duration: CONFIG.endDwell, at: cursor.slice(), scale: prevScale
+    });
+
     // Park the head back where the photograph had it, so the hero settles
-    // exactly into the still image it started from.
-    var back = bakeTravel(cursor, head.home);
+    // exactly into the still image it started from. Deliberately slower than the
+    // rapids between letters: this one is the move the eye is meant to follow,
+    // and like every travel step it runs with the beam off, so it reads as
+    // repositioning rather than another pass.
+    var back = bakeTravel(cursor, head.home, CONFIG.parkFeed);
     this.steps.push({
       type: 'travel', baked: back, duration: back.duration * 1000,
       fromScale: prevScale, toScale: homeScale, parking: true
@@ -783,6 +795,8 @@
       // shrinking on the way so it matches the depth of where it lands.
       lift = Math.sin(local * Math.PI) * CONFIG.travelLift;
       step.scale = lerp(step.fromScale, step.toScale, easeInOut(local));
+    } else if (step.type === 'hold') {
+      x = step.at[0]; y = step.at[1];       // cutting, intensity and lift stay 0
     } else if (step.type === 'pierce') {
       x = step.at[0]; y = step.at[1];
       // Power ramps in, then the pierce blows a small burst of material out.
