@@ -34,7 +34,7 @@ window.LASER_CUT_PROGRAM = {
     tip: [242, 495],
     home: [1464, 495]
   },
-  stock: { src: "assets/img/hero-blank.png", box: [142, 240, 1710, 504] },
+  stock: { src: "assets/img/hero-blank.png", box: [135, 239, 1724, 508] },
   segments: [
     {
       letter: "L", kind: "outer", scale: 0.82,

@@ -1,2 +1,4 @@
 # Diagnostic overlays written by the tools/ scripts; regenerate by running them.
 tools/verify-*.png
+# Intermediate handed from build-cut-program.py to make-stock-plate.py.
+tools/letter-mask.png
