@@ -6,19 +6,21 @@
   <title>Laserski &mdash; Laser Cutting for Apparel &amp; Branding</title>
   <meta name="description" content="Precision laser cutting and engraving for apparel, leather, wood and acrylic. Clean cuts, sharp details.">
   <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" fill="%230b0b0d"/><circle cx="16" cy="16" r="4" fill="%23ffd58c"/><circle cx="16" cy="16" r="1.6" fill="%23fff"/></svg>'>
-  <link rel="preload" as="image" href="assets/img/hero-plate.png" fetchpriority="high">
+  <link rel="preload" as="image" href="assets/img/hero-lit.png" fetchpriority="high">
   <link rel="preload" as="image" href="assets/img/laser-head.png">
   <link rel="stylesheet" href="assets/css/hero.css">
 </head>
 <body>
 
-  <!-- The plate is the clean photograph. The animation appends its four overlays
-       into .hero__stage, in the same coordinate box, and moves the laser
-       assembly sprite along the letters. -->
+  <!-- The plate is the clean photograph, graded by tools/make-letter-render.py so
+       the clear-acrylic letters read against the bed. Only the glyph faces are
+       touched; assets/img/hero-plate.png keeps the untouched original. The
+       animation appends its four overlays into .hero__stage, in the same
+       coordinate box, and moves the laser assembly sprite along the letters. -->
   <header class="hero" data-laser-hero>
     <div class="hero__stage" data-laser-stage>
       <img class="hero__plate"
-           src="assets/img/hero-plate.png"
+           src="assets/img/hero-lit.png"
            width="1984" height="793"
            fetchpriority="high" decoding="async"
            alt="LASERSKI RADOVI cut from clear acrylic on a laser cutter's honeycomb bed.">

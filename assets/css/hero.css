@@ -2,7 +2,8 @@
    Laserski -- hero
    ---------------------------------------------------------------------------
    The hero is composited from two photographs: a clean plate with no machine in
-   it, and the laser assembly cut out of the matching render as a sprite. The
+   it -- graded so its clear-acrylic lettering reads against the bed, the glyph
+   faces only -- and the laser assembly cut out of the matching render as a sprite. The
    animation moves the sprite, so the device follows the cut, and a third derived
    plate -- the same photograph with the lettering painted out -- is erased along
    the cut path so the letters are created by the beam rather than traced.
